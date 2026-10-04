@@ -173,8 +173,20 @@ class DialogService:
             if args.get("max_price_kzt"):
                 intent["max_price"] = int(args["max_price_kzt"]) * 100  # KZT -> tiyn
             request = await self._bookly.create_assistant_request(token, user_message, intent)
-            meta["request_id"] = request["id"]
             candidates = await self._bookly.candidates(token, request["id"])
+            # The backend matches the whole phrase with ILIKE and the model
+            # loves narrow categories; when that yields almost nothing, retry
+            # with the longest keyword and no category filter.
+            query = intent["query"].strip()
+            if len(candidates) < 3 and (" " in query or "category_id" in intent):
+                fallback = dict(intent)
+                fallback.pop("category_id", None)
+                fallback["query"] = max(query.split(), key=len) if query else query
+                retry = await self._bookly.create_assistant_request(token, user_message, fallback)
+                wider = await self._bookly.candidates(token, retry["id"])
+                if len(wider) > len(candidates):
+                    request, candidates = retry, wider
+            meta["request_id"] = request["id"]
             turn.candidates = candidates
             return {"candidates": candidates}
 
