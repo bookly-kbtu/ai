@@ -175,17 +175,19 @@ class DialogService:
             request = await self._bookly.create_assistant_request(token, user_message, intent)
             candidates = await self._bookly.candidates(token, request["id"])
             # The backend matches the whole phrase with ILIKE and the model
-            # loves narrow categories; when that yields almost nothing, retry
-            # with the longest keyword and no category filter.
+            # loves narrow categories; top up a thin result with a keyword
+            # search across all categories and merge the two.
             query = intent["query"].strip()
-            if len(candidates) < 3 and (" " in query or "category_id" in intent):
+            if len(candidates) < 5 and (" " in query or "category_id" in intent):
                 fallback = dict(intent)
                 fallback.pop("category_id", None)
                 fallback["query"] = max(query.split(), key=len) if query else query
                 retry = await self._bookly.create_assistant_request(token, user_message, fallback)
                 wider = await self._bookly.candidates(token, retry["id"])
-                if len(wider) > len(candidates):
-                    request, candidates = retry, wider
+                seen_ids = {c.get("service_id") for c in candidates}
+                merged = candidates + [c for c in wider if c.get("service_id") not in seen_ids]
+                if len(merged) > len(candidates):
+                    request, candidates = retry, merged[:8]
             meta["request_id"] = request["id"]
             turn.candidates = candidates
             # The model is bad at tiyn arithmetic: hand it prices in tenge.
