@@ -106,6 +106,60 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "booking_slots",
+            "description": (
+                "Свободные слоты у того же мастера и услуги, что в существующей записи "
+                "клиента (для переноса или повторной записи). id — из my_bookings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {"type": "string"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
+                },
+                "required": ["booking_id", "date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reschedule_booking",
+            "description": (
+                "Перенести запись: создаёт новую бронь на starts_at из booking_slots и "
+                "отменяет старую. Только после явного подтверждения клиента."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {"type": "string"},
+                    "starts_at": {"type": "string", "description": "RFC3339 из booking_slots"},
+                },
+                "required": ["booking_id", "starts_at"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "book_again",
+            "description": (
+                "Повторить запись «как обычно»: новая бронь к тому же мастеру на ту же "
+                "услугу на время из booking_slots. Старая запись не трогается."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {"type": "string"},
+                    "starts_at": {"type": "string", "description": "RFC3339 из booking_slots"},
+                },
+                "required": ["booking_id", "starts_at"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_favorites",
             "description": "Избранные салоны клиента (вопросы вида 'что у меня в избранном').",
             "parameters": {"type": "object", "properties": {}},
@@ -131,8 +185,9 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "book",
             "description": (
-                "Создать запись на выбранный слот. Вызывай ТОЛЬКО после явного подтверждения "
-                "клиента (он сказал 'да, записывай' про конкретное время)."
+                "Создать запись на слот из get_slots ТОЛЬКО для нового поиска через "
+                "search_candidates. Для переноса или повтора существующей записи используй "
+                "reschedule_booking / book_again. Вызывай только после явного «да» клиента."
             ),
             "parameters": {
                 "type": "object",
@@ -154,9 +209,9 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
     now = datetime.now(ALMATY)
     category_lines = "\n".join(f"- {c['name']}: {c['id']}" for c in categories if c.get("is_active"))
     return f"""Ты — голосовой ассистент Bookly, сервиса записи к бьюти-мастерам в Казахстане.
-Твоя задача — довести клиента до записи за минимум шагов. Отвечай по-русски, коротко и живо,
-как в переписке в мессенджере. Без markdown, без списков длиннее
-трёх пунктов, без UUID в тексте.
+Твоя задача — довести клиента до записи за минимум шагов. Отвечай коротко и живо,
+как в переписке в мессенджере, НА ЯЗЫКЕ КЛИЕНТА: по-русски или по-казахски.
+Без markdown, без списков длиннее трёх пунктов, без UUID в тексте.
 
 Сейчас {now.strftime('%Y-%m-%d %H:%M')}, {WEEKDAYS_RU[now.weekday()]}, часовой пояс Алматы.
 Относительные даты считай от этой: «завтра», «в субботу» и т.п.
@@ -177,6 +232,11 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
    актуальные (pending/confirmed); отменённые упоминай только если спросят.
 8. Отмена: сначала my_bookings, уточни какую запись, дождись явного «да» и только тогда
    cancel_booking с её id. После отмены подтверди словами.
+8а. Перенос («перенеси запись»): my_bookings → уточни какую и на когда → booking_slots на
+   нужную дату → предложи время → после «да» reschedule_booking. Старая отменится сама.
+   Переносить можно только pending/confirmed; отменённую запись предложи повторить (book_again).
+8б. «Запиши как обычно/как всегда»: my_bookings → определи привычную услугу (чаще всего
+   или последняя завершённая) → уточни день → booking_slots → после «да» book_again.
 9. Избранное: list_favorites показывает список, add_favorite добавляет салон из каталога
    по названию. Записаться в салоны из избранного нельзя — они из внешнего каталога.
 10. Не отвечай на темы вне записи и красоты — вежливо возвращай к делу."""

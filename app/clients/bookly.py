@@ -72,6 +72,17 @@ class BooklyClient:
     async def cancel_booking(self, token: str, booking_id: str) -> dict[str, Any]:
         return await self._request("POST", f"/bookings/{booking_id}/cancel", token)
 
+    async def create_booking(
+        self, token: str, master_id: str, service_id: str, location_id: str, starts_at: str
+    ) -> dict[str, Any]:
+        body = {
+            "master_id": master_id,
+            "master_service_id": service_id,
+            "master_location_id": location_id,
+            "starts_at": starts_at,
+        }
+        return await self._request("POST", "/bookings", token, json=body)
+
     async def market_firms(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         return await self._request("GET", "/market/firms", params={"q": query, "limit": limit})
 

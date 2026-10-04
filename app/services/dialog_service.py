@@ -215,9 +215,49 @@ class DialogService:
             ]
             turn.bookings = items[:10]
             meta["booking_ids"] = [b.get("id") for b in items]
+            meta["booking_refs"] = {
+                b.get("id"): {
+                    "master_id": b.get("master_id"),
+                    "service_id": b.get("master_service_id"),
+                    "location_id": b.get("master_location_id"),
+                    "service_name": b.get("service_name_snapshot"),
+                }
+                for b in items
+            }
             return {"bookings": [
                 {**entry, "id": b.get("id")} for entry, b in zip(slim, items)
             ]}
+
+        if name in ("booking_slots", "reschedule_booking", "book_again"):
+            ref = (meta.get("booking_refs") or {}).get(args.get("booking_id"))
+            if not ref:
+                return {"error": "id не из списка: сначала вызови my_bookings"}
+            if name == "booking_slots":
+                slots = await self._bookly.slots(
+                    ref["master_id"], ref["service_id"], ref["location_id"], args["date"]
+                )
+                turn.slots = slots[:24]
+                return {
+                    "service": ref.get("service_name"),
+                    "slots": slots[:24],
+                    "next_step": (
+                        "после подтверждения клиента вызови reschedule_booking (перенос) "
+                        "или book_again (повтор) с этим же booking_id; book и "
+                        "select_service здесь НЕ используются"
+                    ),
+                }
+            created = await self._bookly.create_booking(
+                token, ref["master_id"], ref["service_id"], ref["location_id"], args["starts_at"]
+            )
+            cancelled_old = False
+            if name == "reschedule_booking":
+                try:
+                    await self._bookly.cancel_booking(token, args["booking_id"])
+                    cancelled_old = True
+                except UpstreamError as exc:
+                    log.warning("reschedule_cancel_failed", detail=exc.detail)
+            turn.booking = created
+            return {"booking": created, "old_cancelled": cancelled_old}
 
         if name == "cancel_booking":
             booking_id = args.get("booking_id")
