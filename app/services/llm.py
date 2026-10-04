@@ -109,6 +109,9 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
 как в разговоре: текст будет озвучен и показан на телефоне. Без markdown, без списков длиннее
 трёх пунктов, без UUID в тексте.
 
+Структура каждого ответа: первый абзац — короткая самодостаточная реплика в 1-2 предложения,
+именно её озвучат вслух. Детали, цены и перечисления — после пустой строки.
+
 Сейчас {now.strftime('%Y-%m-%d %H:%M')}, {WEEKDAYS_RU[now.weekday()]}, часовой пояс Алматы.
 Относительные даты считай от этой: «завтра», «в субботу» и т.п.
 
@@ -152,17 +155,18 @@ class LLMClient:
             raise LLMError(f"OpenAI: {exc}") from exc
         return response.choices[0].message
 
-    async def speak(self, text: str) -> bytes:
-        """Neural TTS for the reply; the frontend plays the mp3 and only
-        falls back to browser speechSynthesis when this fails."""
+    async def speak_stream(self, text: str):
+        """Neural TTS as an mp3 chunk stream: the browser starts playing
+        the first chunks while the tail is still being generated."""
         try:
-            response = await self._client.audio.speech.create(
+            async with self._client.audio.speech.with_streaming_response.create(
                 model=self._tts_model,
                 voice=self._tts_voice,
                 input=text,
                 instructions=TTS_INSTRUCTIONS,
                 response_format="mp3",
-            )
+            ) as response:
+                async for chunk in response.iter_bytes():
+                    yield chunk
         except APIError as exc:
             raise LLMError(f"OpenAI TTS: {exc}") from exc
-        return await response.aread()

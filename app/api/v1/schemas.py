@@ -15,6 +15,7 @@ class TtsRequest(BaseModel):
 class ChatResponse(BaseModel):
     conversation_id: str
     reply: str
+    voice_reply: str
     state: Literal["clarify", "recommend", "pick_slot", "confirm", "booked", "failed"]
     candidates: list[dict[str, Any]]
     slots: list[dict[str, Any]]

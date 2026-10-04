@@ -25,9 +25,24 @@ class ChatResult:
     conversation_id: str
     reply: str
     state: str
+    voice_reply: str = ""
     candidates: list[dict[str, Any]] = field(default_factory=list)
     slots: list[dict[str, Any]] = field(default_factory=list)
     booking: dict[str, Any] | None = None
+
+
+def voice_reply_of(reply: str, limit: int = 280) -> str:
+    """The spoken version of a reply: its first paragraph (the prompt asks
+    the model to open with a short self-sufficient line), sentence-trimmed."""
+    first = reply.split("\n\n", 1)[0].strip() or reply.strip()
+    if len(first) <= limit:
+        return first
+    cut = first[:limit]
+    for mark in (". ", "! ", "? "):
+        pos = cut.rfind(mark)
+        if pos > 40:
+            return cut[: pos + 1]
+    return cut.rstrip() + "…"
 
 
 class DialogService:
@@ -68,6 +83,7 @@ class DialogService:
             conversation_id=conversation_id,
             reply=reply,
             state=turn.state(meta),
+            voice_reply=voice_reply_of(reply),
             candidates=turn.candidates,
             slots=turn.slots,
             booking=turn.booking,

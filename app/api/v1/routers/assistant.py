@@ -1,6 +1,6 @@
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import authenticate
 from app.api.v1.schemas import ChatRequest, ChatResponse, TtsRequest
@@ -23,6 +23,7 @@ async def chat(
     return ChatResponse(
         conversation_id=result.conversation_id,
         reply=result.reply,
+        voice_reply=result.voice_reply,
         state=result.state,
         candidates=result.candidates,
         slots=result.slots,
@@ -36,7 +37,19 @@ async def tts(
     body: TtsRequest,
     llm: FromDishka[LLMClient],
     settings: FromDishka[Settings],
-) -> Response:
+) -> StreamingResponse:
     authenticate(request, settings)
-    audio = await llm.speak(body.text)
-    return Response(content=audio, media_type="audio/mpeg")
+    chunks = llm.speak_stream(body.text)
+    # Pull the first chunk before streaming starts: provider errors (bad key,
+    # rate limit) still surface as a clean 502 instead of a broken stream.
+    try:
+        first = await anext(chunks)
+    except StopAsyncIteration:
+        first = b""
+
+    async def body_stream():
+        yield first
+        async for chunk in chunks:
+            yield chunk
+
+    return StreamingResponse(body_stream(), media_type="audio/mpeg")
