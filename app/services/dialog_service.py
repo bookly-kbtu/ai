@@ -184,6 +184,8 @@ class DialogService:
             booking = await self._bookly.book(
                 token, meta["request_id"], meta["location_id"], args["starts_at"], args.get("comment")
             )
+            # The Go booking payload has no address; the frontend card wants one.
+            booking = {**booking, "address": meta.get("location_address", "")}
             turn.booking = booking
             meta["booked"] = True
             return {"booking": booking, "address": meta.get("location_address", "")}
