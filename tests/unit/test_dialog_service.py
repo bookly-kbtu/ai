@@ -157,3 +157,24 @@ def test_trim_history_cuts_at_user_boundary():
     assert len(trimmed) <= 40
     assert trimmed[1]["role"] == "user"  # never starts mid tool exchange
 
+
+async def test_my_bookings_tool_returns_agenda():
+    bookly = FakeBookly()
+    bookly.my_bookings = lambda token, limit=20: _async([
+        {"id": "b1", "service_name_snapshot": "Маникюр", "starts_at": "2026-10-06T10:00:00Z",
+         "status": "confirmed", "price_amount": 800000, "currency": "KZT"},
+    ])
+    llm = FakeLLM([
+        SimpleNamespace(content=None, tool_calls=[tool_call("1", "my_bookings")]),
+        SimpleNamespace(content="У вас маникюр во вторник в 15:00.", tool_calls=None),
+    ])
+    service = make_service(llm, bookly)
+
+    result = await service.chat("user-1", "jwt", None, "какие у меня записи?")
+
+    assert result.bookings[0]["id"] == "b1"
+    assert "маникюр" in result.reply.lower()
+
+
+async def _async(value):
+    return value

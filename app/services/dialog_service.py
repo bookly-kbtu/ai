@@ -15,7 +15,21 @@ from redis.asyncio import Redis
 from app.clients.bookly import BooklyClient
 from app.core.config import Settings
 from app.core.exceptions import UpstreamError
-from app.services.llm import LLMClient, system_prompt
+from datetime import datetime
+
+from app.services.llm import ALMATY, LLMClient, system_prompt
+
+
+def _almaty_time(ts: str) -> str:
+    """Go returns UTC timestamps; the model must talk local time."""
+    try:
+        return (
+            datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            .astimezone(ALMATY)
+            .strftime("%Y-%m-%d %H:%M")
+        )
+    except (ValueError, AttributeError):
+        return ts
 
 log = structlog.get_logger()
 
@@ -28,6 +42,7 @@ class ChatResult:
     candidates: list[dict[str, Any]] = field(default_factory=list)
     slots: list[dict[str, Any]] = field(default_factory=list)
     booking: dict[str, Any] | None = None
+    bookings: list[dict[str, Any]] = field(default_factory=list)
 
 
 
@@ -72,6 +87,7 @@ class DialogService:
             candidates=turn.candidates,
             slots=turn.slots,
             booking=turn.booking,
+            bookings=turn.bookings,
         )
 
     async def _run_llm_loop(
@@ -175,6 +191,21 @@ class DialogService:
             meta["selected"] = {"master_id": args["master_id"], "service_id": args["service_id"]}
             return {"status": selected.get("status", "selected")}
 
+        if name == "my_bookings":
+            items = await self._bookly.my_bookings(token)
+            slim = [
+                {
+                    "service": b.get("service_name_snapshot"),
+                    "starts_at_almaty": _almaty_time(b.get("starts_at", "")),
+                    "status": b.get("status"),
+                    "price_amount": b.get("price_amount"),
+                    "currency": b.get("currency"),
+                }
+                for b in items
+            ]
+            turn.bookings = items[:10]
+            return {"bookings": slim}
+
         if name == "book":
             # Code-level guard on top of the prompt rule: booking requires an
             # explicit earlier selection and a known location from get_slots.
@@ -213,6 +244,7 @@ class _TurnEffects:
         self.candidates: list[dict[str, Any]] = []
         self.slots: list[dict[str, Any]] = []
         self.booking: dict[str, Any] | None = None
+        self.bookings: list[dict[str, Any]] = []
 
     def state(self, meta: dict[str, Any]) -> str:
         if self.booking:

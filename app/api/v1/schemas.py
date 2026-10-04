@@ -15,3 +15,4 @@ class ChatResponse(BaseModel):
     candidates: list[dict[str, Any]]
     slots: list[dict[str, Any]]
     booking: dict[str, Any] | None
+    bookings: list[dict[str, Any]]

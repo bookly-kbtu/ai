@@ -25,5 +25,6 @@ async def chat(
         candidates=result.candidates,
         slots=result.slots,
         booking=result.booking,
+        bookings=result.bookings,
     )
 

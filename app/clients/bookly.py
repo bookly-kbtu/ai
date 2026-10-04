@@ -66,6 +66,9 @@ class BooklyClient:
             "PUT", f"/assistant/requests/{request_id}/selection", token, json=body
         )
 
+    async def my_bookings(self, token: str, limit: int = 20) -> list[dict[str, Any]]:
+        return await self._request("GET", "/bookings/my", token, params={"limit": limit})
+
     async def book(
         self,
         token: str,
