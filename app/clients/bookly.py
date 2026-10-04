@@ -41,7 +41,7 @@ class BooklyClient:
         body = {"transcript": transcript, "intent": intent}
         return await self._request("POST", "/assistant/requests", token, json=body)
 
-    async def candidates(self, token: str, request_id: str, limit: int = 5) -> list[dict[str, Any]]:
+    async def candidates(self, token: str, request_id: str, limit: int = 8) -> list[dict[str, Any]]:
         return await self._request(
             "GET", f"/assistant/requests/{request_id}/candidates", token, params={"limit": limit}
         )
