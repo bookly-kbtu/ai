@@ -1,0 +1,16 @@
+name: bookly-ai
+
+# Joins the infra stack's network: start infra (and backend) first.
+services:
+  ai:
+    build: .
+    image: bookly-ai:latest
+    env_file: .env
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"
+
+networks:
+  default:
+    name: bookly
+    external: true
