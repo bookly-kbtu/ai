@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    tts_model: str = "gpt-4o-mini-tts"
+    tts_voice: str = "nova"
 
     # Same secret as the Go backend: we validate its HS256 access tokens locally.
     jwt_secret: str = ""

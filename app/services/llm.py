@@ -127,10 +127,18 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
 7. Ты не можешь отменять записи и отвечать на темы вне записи к мастерам — вежливо возвращай к делу."""
 
 
+TTS_INSTRUCTIONS = (
+    "Тёплый, дружелюбный женский голос ассистента сервиса красоты. "
+    "Говори по-русски естественно и живо, в разговорном темпе, без пафоса."
+)
+
+
 class LLMClient:
-    def __init__(self, client: AsyncOpenAI, model: str) -> None:
+    def __init__(self, client: AsyncOpenAI, model: str, tts_model: str, tts_voice: str) -> None:
         self._client = client
         self._model = model
+        self._tts_model = tts_model
+        self._tts_voice = tts_voice
 
     async def complete(self, messages: list[dict[str, Any]]) -> Any:
         try:
@@ -143,3 +151,18 @@ class LLMClient:
         except APIError as exc:  # covers auth, rate limit, server errors
             raise LLMError(f"OpenAI: {exc}") from exc
         return response.choices[0].message
+
+    async def speak(self, text: str) -> bytes:
+        """Neural TTS for the reply; the frontend plays the mp3 and only
+        falls back to browser speechSynthesis when this fails."""
+        try:
+            response = await self._client.audio.speech.create(
+                model=self._tts_model,
+                voice=self._tts_voice,
+                input=text,
+                instructions=TTS_INSTRUCTIONS,
+                response_format="mp3",
+            )
+        except APIError as exc:
+            raise LLMError(f"OpenAI TTS: {exc}") from exc
+        return await response.aread()

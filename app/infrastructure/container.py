@@ -35,7 +35,7 @@ class AppProvider(Provider):
 
     @provide
     def llm(self, client: AsyncOpenAI, settings: Settings) -> LLMClient:
-        return LLMClient(client, settings.openai_model)
+        return LLMClient(client, settings.openai_model, settings.tts_model, settings.tts_voice)
 
     @provide
     async def redis(self, settings: Settings) -> Redis:
