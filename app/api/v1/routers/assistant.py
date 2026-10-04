@@ -17,7 +17,13 @@ async def chat(
     settings: FromDishka[Settings],
 ) -> ChatResponse:
     auth = authenticate(request, settings)
-    result = await service.chat(auth.user_id, auth.token, body.conversation_id, body.message)
+    result = await service.chat(
+        auth.user_id,
+        auth.token,
+        body.conversation_id,
+        body.message,
+        [f.model_dump() for f in body.favorites],
+    )
     return ChatResponse(
         conversation_id=result.conversation_id,
         reply=result.reply,
@@ -26,5 +32,7 @@ async def chat(
         slots=result.slots,
         booking=result.booking,
         bookings=result.bookings,
+        favorites_add=result.favorites_add,
+        favorites_show=result.favorites_show,
     )
 

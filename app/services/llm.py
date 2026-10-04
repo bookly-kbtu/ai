@@ -91,6 +91,44 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "cancel_booking",
+            "description": (
+                "Отменить запись клиента. Вызывай ТОЛЬКО после явного подтверждения и только "
+                "с id из свежего вызова my_bookings."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"booking_id": {"type": "string"}},
+                "required": ["booking_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_favorites",
+            "description": "Избранные салоны клиента (вопросы вида 'что у меня в избранном').",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_favorite",
+            "description": (
+                "Добавить салон из каталога в избранное по названию "
+                "('добавь в избранное Laser Lux')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "Название салона"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "book",
             "description": (
                 "Создать запись на выбранный слот. Вызывай ТОЛЬКО после явного подтверждения "
@@ -137,8 +175,11 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
 6. Если ничего не нашлось или слотов нет — предложи изменить запрос, дату или бюджет.
 7. Спросили про свои записи или календарь — вызови my_bookings и кратко перескажи ближайшие
    актуальные (pending/confirmed); отменённые упоминай только если спросят.
-8. Ты не можешь отменять записи (отмена — на экране «Записи») и не отвечаешь на темы вне
-   записи к мастерам — вежливо возвращай к делу."""
+8. Отмена: сначала my_bookings, уточни какую запись, дождись явного «да» и только тогда
+   cancel_booking с её id. После отмены подтверди словами.
+9. Избранное: list_favorites показывает список, add_favorite добавляет салон из каталога
+   по названию. Записаться в салоны из избранного нельзя — они из внешнего каталога.
+10. Не отвечай на темы вне записи и красоты — вежливо возвращай к делу."""
 
 
 class LLMClient:

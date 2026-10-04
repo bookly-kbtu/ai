@@ -43,6 +43,8 @@ class ChatResult:
     slots: list[dict[str, Any]] = field(default_factory=list)
     booking: dict[str, Any] | None = None
     bookings: list[dict[str, Any]] = field(default_factory=list)
+    favorites_add: list[dict[str, Any]] = field(default_factory=list)
+    favorites_show: bool = False
 
 
 
@@ -57,7 +59,12 @@ class DialogService:
         return f"ai:conv:{user_id}:{conversation_id}"
 
     async def chat(
-        self, user_id: str, token: str, conversation_id: str | None, message: str
+        self,
+        user_id: str,
+        token: str,
+        conversation_id: str | None,
+        message: str,
+        favorites: list[dict[str, Any]] | None = None,
     ) -> ChatResult:
         conversation_id = conversation_id or uuid.uuid4().hex
         key = self._key(user_id, conversation_id)
@@ -74,6 +81,7 @@ class DialogService:
         messages.append({"role": "user", "content": message})
 
         turn = _TurnEffects()
+        turn.client_favorites = favorites or []
         reply = await self._run_llm_loop(messages, meta, token, message, turn)
 
         session["messages"] = _trim_history(messages)
@@ -88,6 +96,8 @@ class DialogService:
             slots=turn.slots,
             booking=turn.booking,
             bookings=turn.bookings,
+            favorites_add=turn.favorites_add,
+            favorites_show=turn.favorites_show,
         )
 
     async def _run_llm_loop(
@@ -204,7 +214,31 @@ class DialogService:
                 for b in items
             ]
             turn.bookings = items[:10]
-            return {"bookings": slim}
+            meta["booking_ids"] = [b.get("id") for b in items]
+            return {"bookings": [
+                {**entry, "id": b.get("id")} for entry, b in zip(slim, items)
+            ]}
+
+        if name == "cancel_booking":
+            booking_id = args.get("booking_id")
+            # Only ids the model just saw via my_bookings are cancellable.
+            if booking_id not in (meta.get("booking_ids") or []):
+                return {"error": "id не из списка: сначала вызови my_bookings"}
+            cancelled = await self._bookly.cancel_booking(token, booking_id)
+            return {"status": cancelled.get("status", "cancelled")}
+
+        if name == "list_favorites":
+            turn.favorites_show = True
+            return {"favorites": turn.client_favorites}
+
+        if name == "add_favorite":
+            firms = await self._bookly.market_firms(args.get("name", ""))
+            if not firms:
+                return {"error": "такой салон в каталоге не нашёлся"}
+            firm = firms[0]
+            slim = {"id": firm.get("id"), "name": firm.get("name")}
+            turn.favorites_add.append(slim)
+            return {"added": slim}
 
         if name == "book":
             # Code-level guard on top of the prompt rule: booking requires an
@@ -245,6 +279,9 @@ class _TurnEffects:
         self.slots: list[dict[str, Any]] = []
         self.booking: dict[str, Any] | None = None
         self.bookings: list[dict[str, Any]] = []
+        self.favorites_add: list[dict[str, Any]] = []
+        self.favorites_show = False
+        self.client_favorites: list[dict[str, Any]] = []
 
     def state(self, meta: dict[str, Any]) -> str:
         if self.booking:
