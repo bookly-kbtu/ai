@@ -8,14 +8,9 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
 
 
-class TtsRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=1500)
-
-
 class ChatResponse(BaseModel):
     conversation_id: str
     reply: str
-    voice_reply: str
     state: Literal["clarify", "recommend", "pick_slot", "confirm", "booked", "failed"]
     candidates: list[dict[str, Any]]
     slots: list[dict[str, Any]]

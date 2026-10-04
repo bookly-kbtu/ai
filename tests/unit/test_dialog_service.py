@@ -157,13 +157,3 @@ def test_trim_history_cuts_at_user_boundary():
     assert len(trimmed) <= 40
     assert trimmed[1]["role"] == "user"  # never starts mid tool exchange
 
-
-def test_voice_reply_is_first_paragraph():
-    from app.services.dialog_service import voice_reply_of
-
-    reply = "Нашла три варианта, самый выгодный у Аружан.\n\n1. Аружан — 8000\n2. Мадина — 9000"
-    assert voice_reply_of(reply) == "Нашла три варианта, самый выгодный у Аружан."
-    long = "Первое предложение. " * 30
-    trimmed = voice_reply_of(long)
-    assert len(trimmed) <= 281 and trimmed.endswith(".")
-    assert voice_reply_of("Короткий ответ без абзацев") == "Короткий ответ без абзацев"

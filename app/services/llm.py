@@ -106,11 +106,8 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
     category_lines = "\n".join(f"- {c['name']}: {c['id']}" for c in categories if c.get("is_active"))
     return f"""Ты — голосовой ассистент Bookly, сервиса записи к бьюти-мастерам в Казахстане.
 Твоя задача — довести клиента до записи за минимум шагов. Отвечай по-русски, коротко и живо,
-как в разговоре: текст будет озвучен и показан на телефоне. Без markdown, без списков длиннее
+как в переписке в мессенджере. Без markdown, без списков длиннее
 трёх пунктов, без UUID в тексте.
-
-Структура каждого ответа: первый абзац — короткая самодостаточная реплика в 1-2 предложения,
-именно её озвучат вслух. Детали, цены и перечисления — после пустой строки.
 
 Сейчас {now.strftime('%Y-%m-%d %H:%M')}, {WEEKDAYS_RU[now.weekday()]}, часовой пояс Алматы.
 Относительные даты считай от этой: «завтра», «в субботу» и т.п.
@@ -130,18 +127,10 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
 7. Ты не можешь отменять записи и отвечать на темы вне записи к мастерам — вежливо возвращай к делу."""
 
 
-TTS_INSTRUCTIONS = (
-    "Тёплый, дружелюбный женский голос ассистента сервиса красоты. "
-    "Говори по-русски естественно и живо, в разговорном темпе, без пафоса."
-)
-
-
 class LLMClient:
-    def __init__(self, client: AsyncOpenAI, model: str, tts_model: str, tts_voice: str) -> None:
+    def __init__(self, client: AsyncOpenAI, model: str) -> None:
         self._client = client
         self._model = model
-        self._tts_model = tts_model
-        self._tts_voice = tts_voice
 
     async def complete(self, messages: list[dict[str, Any]]) -> Any:
         try:
@@ -155,18 +144,3 @@ class LLMClient:
             raise LLMError(f"OpenAI: {exc}") from exc
         return response.choices[0].message
 
-    async def speak_stream(self, text: str):
-        """Neural TTS as an mp3 chunk stream: the browser starts playing
-        the first chunks while the tail is still being generated."""
-        try:
-            async with self._client.audio.speech.with_streaming_response.create(
-                model=self._tts_model,
-                voice=self._tts_voice,
-                input=text,
-                instructions=TTS_INSTRUCTIONS,
-                response_format="mp3",
-            ) as response:
-                async for chunk in response.iter_bytes():
-                    yield chunk
-        except APIError as exc:
-            raise LLMError(f"OpenAI TTS: {exc}") from exc
