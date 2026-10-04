@@ -188,7 +188,18 @@ class DialogService:
                     request, candidates = retry, wider
             meta["request_id"] = request["id"]
             turn.candidates = candidates
-            return {"candidates": candidates}
+            # The model is bad at tiyn arithmetic: hand it prices in tenge.
+            return {"candidates": [
+                {
+                    "master_id": c.get("master_id"),
+                    "service_id": c.get("service_id"),
+                    "display_name": c.get("display_name"),
+                    "service_name": c.get("service_name"),
+                    "price_kzt": (c.get("price_amount") or 0) // 100,
+                    "duration_minutes": c.get("duration_minutes"),
+                }
+                for c in candidates
+            ]}
 
         if name == "get_slots":
             locations = await self._bookly.locations(args["master_id"])
