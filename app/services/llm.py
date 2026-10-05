@@ -35,10 +35,6 @@ TOOLS: list[dict[str, Any]] = [
                             "названиям в результате."
                         ),
                     },
-                    "category_id": {
-                        "type": ["string", "null"],
-                        "description": "UUID категории из списка в системном промпте, если понятна",
-                    },
                     "max_price_kzt": {
                         "type": ["integer", "null"],
                         "description": "Бюджет клиента в тенге (не в тиынах), если назван",
@@ -212,7 +208,7 @@ TOOLS: list[dict[str, Any]] = [
 
 def system_prompt(categories: list[dict[str, Any]]) -> str:
     now = datetime.now(ALMATY)
-    category_lines = "\n".join(f"- {c['name']}: {c['id']}" for c in categories if c.get("is_active"))
+    del categories  # kept in the signature for call-site stability
     return f"""Ты — голосовой ассистент Bookly, сервиса записи к бьюти-мастерам в Казахстане.
 Твоя задача — довести клиента до записи за минимум шагов. Отвечай коротко и живо,
 как в переписке в мессенджере, НА ЯЗЫКЕ КЛИЕНТА: по-русски или по-казахски.
@@ -221,13 +217,10 @@ def system_prompt(categories: list[dict[str, Any]]) -> str:
 Сейчас {now.strftime('%Y-%m-%d %H:%M')}, {WEEKDAYS_RU[now.weekday()]}, часовой пояс Алматы.
 Относительные даты считай от этой: «завтра», «в субботу» и т.п.
 
-Категории услуг (для search_candidates):
-{category_lines}
-
 Правила:
 1. Понял услугу — сразу search_candidates, не переспрашивай лишнего. Бюджет клиент называет в тенге.
 1а. Клиент назвал конкретный салон или мастера («запиши меня в Barber Janvs») — передай это
-   название как query без category_id: поиск находит и по имени мастера/салона.
+   название как query: поиск находит и по имени мастера/салона.
 2. Из кандидатов рекомендуй 2-3 лучших и объясни почему. Цены приходят уже в тенге
    (price_kzt) — называй их как есть, ничего не пересчитывай.
 3. Клиент выбрал вариант — select_service, затем get_slots на нужную дату и предложи 3-4 удобных

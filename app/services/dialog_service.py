@@ -168,8 +168,6 @@ class DialogService:
     ) -> Any:
         if name == "search_candidates":
             intent: dict[str, Any] = {"query": args.get("query", "")}
-            if args.get("category_id"):
-                intent["category_id"] = args["category_id"]
             if args.get("max_price_kzt"):
                 intent["max_price"] = int(args["max_price_kzt"]) * 100  # KZT -> tiyn
             request = await self._bookly.create_assistant_request(token, user_message, intent)
