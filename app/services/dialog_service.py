@@ -204,7 +204,7 @@ class DialogService:
             if args.get("max_price_kzt"):
                 intent["max_price"] = int(args["max_price_kzt"]) * 100  # KZT -> tiyn
             request = await self._bookly.create_assistant_request(token, user_message, intent)
-            candidates = await self._bookly.candidates(token, request["id"], limit=40)
+            candidates = await self._bookly.candidates(token, request["id"], limit=100)
             # The backend matches the whole phrase with ILIKE; top up a thin
             # result with a single-keyword retry and merge.
             query = intent["query"].strip()
@@ -212,14 +212,14 @@ class DialogService:
                 fallback = dict(intent)
                 fallback["query"] = max(query.split(), key=len)
                 retry = await self._bookly.create_assistant_request(token, user_message, fallback)
-                wider = await self._bookly.candidates(token, retry["id"], limit=40)
+                wider = await self._bookly.candidates(token, retry["id"], limit=100)
                 seen_ids = {c.get("service_id") for c in candidates}
                 merged = candidates + [c for c in wider if c.get("service_id") not in seen_ids]
                 if len(merged) > len(candidates):
                     request, candidates = retry, merged
-            candidates = _rank_candidates(candidates, query)
+            candidates = _rank_candidates(candidates, query, cap=20)
             meta["request_id"] = request["id"]
-            turn.candidates = candidates
+            turn.candidates = candidates[:8]
             # The model is bad at tiyn arithmetic: hand it prices in tenge.
             return {"candidates": [
                 {
