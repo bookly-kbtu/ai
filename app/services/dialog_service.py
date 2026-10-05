@@ -70,11 +70,11 @@ class DialogService:
         key = self._key(user_id, conversation_id)
 
         stored = await self._redis.get(key)
-        if stored:
-            session = json.loads(stored)
-        else:
-            categories = await self._bookly.categories()
-            session = {"messages": [{"role": "system", "content": system_prompt(categories)}], "meta": {}}
+        session = json.loads(stored) if stored else {"messages": [{}], "meta": {}}
+        # The system prompt embeds "today": refresh it every turn, otherwise a
+        # long-lived conversation keeps resolving «завтра» against a stale date.
+        categories = await self._bookly.categories()
+        session["messages"][0] = {"role": "system", "content": system_prompt(categories)}
 
         messages: list[dict[str, Any]] = session["messages"]
         meta: dict[str, Any] = session["meta"]
