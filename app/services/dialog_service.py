@@ -6,6 +6,7 @@ side effects of the turn (candidates/slots/booking) next to the text reply."""
 
 import json
 import uuid
+from datetime import date
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,6 +33,44 @@ def _almaty_time(ts: str) -> str:
         return ts
 
 log = structlog.get_logger()
+
+
+def _fix_year_date(value: str) -> str:
+    """gpt-4o-mini's internal prior drags dates into 2023; a past date from
+    the model really means the nearest future occurrence of that day."""
+    try:
+        day = date.fromisoformat(value)
+    except (ValueError, TypeError):
+        return value
+    today = datetime.now(ALMATY).date()
+    if day >= today:
+        return value
+    try:
+        bumped = day.replace(year=today.year)
+        if bumped < today:
+            bumped = bumped.replace(year=today.year + 1)
+        return bumped.isoformat()
+    except ValueError:  # Feb 29
+        return value
+
+
+def _fix_year_ts(value: str) -> str:
+    try:
+        ts = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError, AttributeError):
+        return value
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=ALMATY)
+    now = datetime.now(ALMATY)
+    if ts >= now:
+        return value
+    try:
+        bumped = ts.replace(year=now.year)
+        if bumped < now:
+            bumped = bumped.replace(year=now.year + 1)
+        return bumped.isoformat()
+    except ValueError:
+        return value
 
 
 def _rank_candidates(cands: list[dict[str, Any]], query: str, cap: int = 8) -> list[dict[str, Any]]:
@@ -234,6 +273,7 @@ class DialogService:
             ]}
 
         if name == "get_slots":
+            args["date"] = _fix_year_date(args.get("date", ""))
             locations = await self._bookly.locations(args["master_id"])
             active = [l for l in locations if l.get("is_active", True)]
             if not active:
@@ -289,7 +329,8 @@ class DialogService:
                 return {"error": "id не из списка: сначала вызови my_bookings"}
             if name == "booking_slots":
                 slots = await self._bookly.slots(
-                    ref["master_id"], ref["service_id"], ref["location_id"], args["date"]
+                    ref["master_id"], ref["service_id"], ref["location_id"],
+                    _fix_year_date(args.get("date", "")),
                 )
                 turn.slots = slots[:24]
                 return {
@@ -302,7 +343,8 @@ class DialogService:
                     ),
                 }
             created = await self._bookly.create_booking(
-                token, ref["master_id"], ref["service_id"], ref["location_id"], args["starts_at"]
+                token, ref["master_id"], ref["service_id"], ref["location_id"],
+                _fix_year_ts(args.get("starts_at", "")),
             )
             cancelled_old = False
             if name == "reschedule_booking":
@@ -343,7 +385,8 @@ class DialogService:
             if not meta.get("location_id"):
                 return {"error": "сначала покажи слоты через get_slots"}
             booking = await self._bookly.book(
-                token, meta["request_id"], meta["location_id"], args["starts_at"], args.get("comment")
+                token, meta["request_id"], meta["location_id"],
+                _fix_year_ts(args.get("starts_at", "")), args.get("comment"),
             )
             # The Go booking payload has no address; the frontend card wants one.
             booking = {**booking, "address": meta.get("location_address", "")}

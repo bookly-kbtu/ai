@@ -178,3 +178,18 @@ async def test_my_bookings_tool_returns_agenda():
 
 async def _async(value):
     return value
+
+
+def test_past_years_are_bumped_to_the_future():
+    from datetime import datetime, timedelta
+    from app.services.dialog_service import _fix_year_date, _fix_year_ts
+    from app.services.llm import ALMATY
+
+    today = datetime.now(ALMATY)
+    assert _fix_year_date("2023-10-08") == f"{today.year}-10-08" or _fix_year_date(
+        "2023-10-08"
+    ).startswith(str(today.year + 1))
+    future = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+    assert _fix_year_date(future) == future
+    assert _fix_year_ts("2023-10-08T15:00:00+05:00").startswith(str(today.year))
+    assert _fix_year_date("not-a-date") == "not-a-date"
