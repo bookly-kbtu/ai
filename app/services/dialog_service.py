@@ -34,6 +34,36 @@ def _almaty_time(ts: str) -> str:
 log = structlog.get_logger()
 
 
+def _rank_candidates(cands: list[dict[str, Any]], query: str, cap: int = 8) -> list[dict[str, Any]]:
+    """Service-name relevance first, then price; at most two services per
+    master so one salon's price list doesn't flood the result."""
+    q = query.lower().strip()
+
+    def score(c: dict[str, Any]):
+        name = (c.get("service_name") or "").lower()
+        master = (c.get("display_name") or "").lower()
+        relevance = 0
+        if q and q in name:
+            relevance -= 100
+            if name.startswith(q):
+                relevance -= 10
+        if q and q in master:
+            relevance -= 5
+        return (relevance, c.get("price_amount") or 0)
+
+    picked: list[dict[str, Any]] = []
+    per_master: dict[str, int] = {}
+    for c in sorted(cands, key=score):
+        master_id = c.get("master_id")
+        if per_master.get(master_id, 0) >= 2:
+            continue
+        per_master[master_id] = per_master.get(master_id, 0) + 1
+        picked.append(c)
+        if len(picked) >= cap:
+            break
+    return picked
+
+
 @dataclass
 class ChatResult:
     conversation_id: str
@@ -171,21 +201,20 @@ class DialogService:
             if args.get("max_price_kzt"):
                 intent["max_price"] = int(args["max_price_kzt"]) * 100  # KZT -> tiyn
             request = await self._bookly.create_assistant_request(token, user_message, intent)
-            candidates = await self._bookly.candidates(token, request["id"])
-            # The backend matches the whole phrase with ILIKE and the model
-            # loves narrow categories; top up a thin result with a keyword
-            # search across all categories and merge the two.
+            candidates = await self._bookly.candidates(token, request["id"], limit=40)
+            # The backend matches the whole phrase with ILIKE; top up a thin
+            # result with a single-keyword retry and merge.
             query = intent["query"].strip()
-            if len(candidates) < 5 and (" " in query or "category_id" in intent):
+            if len(candidates) < 5 and " " in query:
                 fallback = dict(intent)
-                fallback.pop("category_id", None)
-                fallback["query"] = max(query.split(), key=len) if query else query
+                fallback["query"] = max(query.split(), key=len)
                 retry = await self._bookly.create_assistant_request(token, user_message, fallback)
-                wider = await self._bookly.candidates(token, retry["id"])
+                wider = await self._bookly.candidates(token, retry["id"], limit=40)
                 seen_ids = {c.get("service_id") for c in candidates}
                 merged = candidates + [c for c in wider if c.get("service_id") not in seen_ids]
                 if len(merged) > len(candidates):
-                    request, candidates = retry, merged[:8]
+                    request, candidates = retry, merged
+            candidates = _rank_candidates(candidates, query)
             meta["request_id"] = request["id"]
             turn.candidates = candidates
             # The model is bad at tiyn arithmetic: hand it prices in tenge.
