@@ -49,7 +49,10 @@ def _rank_candidates(cands: list[dict[str, Any]], query: str, cap: int = 8) -> l
                 relevance -= 10
         if q and q in master:
             relevance -= 5
-        return (relevance, c.get("price_amount") or 0)
+        # Prefer full-length services over 10-minute express add-ons
+        # («стрижка чёлки») that win any ascending price sort.
+        duration_bucket = min(int(c.get("duration_minutes") or 0), 60) // 15
+        return (relevance, -duration_bucket, c.get("price_amount") or 0)
 
     picked: list[dict[str, Any]] = []
     per_master: dict[str, int] = {}
